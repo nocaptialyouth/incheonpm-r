@@ -16,6 +16,8 @@
     activeFilters: $("#activeFilters"),
     dialog: $("#detailDialog"),
     dialogContent: $("#dialogContent"),
+    homepageDialog: $("#homepageDialog"),
+    homepageDialogContent: $("#homepageDialogContent"),
     favoriteToggle: $("#favoriteToggle"),
     toast: $("#toast"),
   };
@@ -155,9 +157,10 @@
       return true;
     });
 
+    const sortVal = elements.sort ? elements.sort.value : "recommended";
     return filtered.sort((a, b) => {
-      if (elements.sort.value === "name") return a.name.localeCompare(b.name, "ko");
-      if (elements.sort.value === "district") {
+      if (sortVal === "name") return a.name.localeCompare(b.name, "ko");
+      if (sortVal === "district") {
         return districtOrder.indexOf(a.district) - districtOrder.indexOf(b.district) || a.name.localeCompare(b.name, "ko");
       }
       return verifiedScore(b) - verifiedScore(a) || a.name.localeCompare(b.name, "ko");
@@ -195,6 +198,9 @@
     const homepage = homepageUrl(item);
     const homepageHref = homepage || homepageSearchUrl(item);
     const homepageLabel = homepage ? "홈페이지" : "홈페이지 찾기";
+    const homepageAction = homepage
+      ? `<a href="#" data-action="homepage-select" data-id="${escapeHtml(item.id)}">${homepageLabel}</a>`
+      : `<a href="${escapeHtml(homepageHref)}" target="_blank" rel="noopener">${homepageLabel}</a>`;
 
     return `
       <article class="institution-card" data-id="${escapeHtml(item.id)}">
@@ -214,7 +220,7 @@
         <div class="card-actions">
           ${phoneLink}
           <a href="${mapUrl(item)}" target="_blank" rel="noopener">지도 보기</a>
-          <a href="${escapeHtml(homepageHref)}" target="_blank" rel="noopener">${homepageLabel}</a>
+          ${homepageAction}
           <button class="detail-button" data-action="detail">상세 보기</button>
         </div>
       </article>`;
@@ -222,15 +228,18 @@
 
   function render() {
     const items = filterData();
-    elements.resultCount.textContent = items.length.toLocaleString("ko-KR");
-    elements.results.innerHTML = items.map(cardTemplate).join("");
-    elements.results.hidden = items.length === 0;
-    elements.empty.hidden = items.length !== 0;
+    if (elements.resultCount) elements.resultCount.textContent = items.length.toLocaleString("ko-KR");
+    if (elements.results) {
+      elements.results.innerHTML = items.map(cardTemplate).join("");
+      elements.results.hidden = items.length === 0;
+    }
+    if (elements.empty) elements.empty.hidden = items.length !== 0;
     renderActiveFilters();
     renderHeroSuggestions(items);
   }
 
   function renderHeroSuggestions(items) {
+    if (!elements.heroSuggestions) return;
     if (!state.query) {
       elements.heroSuggestions.hidden = true;
       elements.heroSuggestions.innerHTML = "";
@@ -258,6 +267,7 @@
   }
 
   function renderActiveFilters() {
+    if (!elements.activeFilters) return;
     const chips = [];
     if (state.query) chips.push(["query", `검색: ${state.query}`]);
     if (state.district) chips.push(["district", state.district]);
@@ -328,6 +338,8 @@
 
   function openDetail(item) {
     activeDetailItem = item;
+    if (!elements.dialogContent || !elements.dialog) return;
+
     const phoneAction = isPhone(item.phone)
       ? `<a href="tel:${escapeHtml(item.phone)}" data-phone="${escapeHtml(item.phone)}" data-name="${escapeHtml(item.name)}">☎ 전화번호 보기</a>`
       : ``;
@@ -336,6 +348,9 @@
     const homepage = homepageUrl(item);
     const homepageHref = homepage || homepageSearchUrl(item);
     const homepageLabel = homepage ? "공식 홈페이지 ↗" : "네이버 병원 검색 ↗";
+    const detailHomepageAction = homepage
+      ? `<a href="#" data-action="homepage-select" data-id="${escapeHtml(item.id)}">${homepageLabel}</a>`
+      : `<a href="${escapeHtml(homepageHref)}" target="_blank" rel="noopener">${homepageLabel}</a>`;
 
     elements.dialogContent.innerHTML = `
       <div class="dialog-header">
@@ -351,7 +366,7 @@
           ${phoneAction}
           <a href="${mapUrl(item)}" target="_blank" rel="noopener">네이버 지도 ↗</a>
           <a href="${kakaoMapUrl(item)}" target="_blank" rel="noopener">카카오맵 ↗</a>
-          <a href="${escapeHtml(homepageHref)}" target="_blank" rel="noopener">${homepageLabel}</a>
+          ${detailHomepageAction}
           <a href="${youtubeUrl(item)}" target="_blank" rel="noopener" style="background: #ffebeb; border-color: #ffd6d6; color: #e50914;">유튜브 검색 ↗</a>
           <button type="button" data-copy="${escapeHtml(item.address)}">주소 복사</button>
           <button type="button" data-share="${escapeHtml(item.id)}">정보 공유</button>
@@ -362,6 +377,36 @@
         </dl>
       </div>`;
     elements.dialog.showModal();
+  }
+
+  function openHomepageSelect(item) {
+    if (!elements.homepageDialogContent || !elements.homepageDialog) return;
+    const homepage = homepageUrl(item);
+    const searchUrl = homepageSearchUrl(item);
+    
+    elements.homepageDialogContent.innerHTML = `
+      <div class="homepage-dialog-header">
+        <div>
+          <p>${escapeHtml(item.district)} · ${escapeHtml(item.type)}</p>
+          <h3 id="homepageDialogTitle">${escapeHtml(item.name)}</h3>
+        </div>
+        <button class="homepage-dialog-close" aria-label="닫기">×</button>
+      </div>
+      <div class="homepage-dialog-body">
+        <p class="homepage-dialog-desc">
+          병원 홈페이지가 만료되었거나 일시적인 문제로 접속이 되지 않는 경우가 있습니다. 원하시는 이동 방법을 선택해 주세요.
+        </p>
+        <a href="${escapeHtml(homepage)}" class="homepage-btn-option primary" target="_blank" rel="noopener">
+          <span>🌐 공식 홈페이지 바로가기</span>
+          <span class="btn-icon">›</span>
+        </a>
+        <a href="${escapeHtml(searchUrl)}" class="homepage-btn-option naver" target="_blank" rel="noopener">
+          <span>💚 네이버에서 병원 검색하기</span>
+          <span class="btn-icon">›</span>
+        </a>
+      </div>
+    `;
+    elements.homepageDialog.showModal();
   }
 
   function saveFavorites() {
@@ -404,9 +449,12 @@
         row.querySelectorAll(".drawer-chip").forEach((x) => x.classList.remove("active"));
         el.classList.add("active");
         state.district = el.dataset.district;
-        elements.district.value = el.dataset.district;
+        if (elements.district) elements.district.value = el.dataset.district;
         
-        document.querySelector(".directory").scrollIntoView({ behavior: "smooth", block: "start" });
+        const directorySection = $(".directory");
+        if (directorySection) {
+          directorySection.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
         render();
       });
     });
@@ -414,11 +462,11 @@
 
   function resetAll() {
     Object.assign(state, { query: "", district: "", type: "", verification: "", preset: "", favoritesOnly: false });
-    elements.search.value = "";
-    elements.district.value = "";
-    elements.type.value = "";
-    elements.verification.value = "";
-    elements.favoriteToggle.setAttribute("aria-pressed", "false");
+    if (elements.search) elements.search.value = "";
+    if (elements.district) elements.district.value = "";
+    if (elements.type) elements.type.value = "";
+    if (elements.verification) elements.verification.value = "";
+    if (elements.favoriteToggle) elements.favoriteToggle.setAttribute("aria-pressed", "false");
     document.querySelectorAll("[data-preset]").forEach((button) => button.classList.remove("active"));
     document.querySelectorAll("#districtRow .drawer-chip").forEach((el) => {
       el.classList.toggle("active", (el.dataset.district || "") === "");
@@ -427,6 +475,7 @@
   }
 
   function showToast(message) {
+    if (!elements.toast) return;
     elements.toast.textContent = message;
     elements.toast.classList.add("show");
     window.clearTimeout(showToast.timer);
@@ -449,135 +498,208 @@
   }
 
   function populateFilters() {
-    // Unique districts sorted by districtOrder
-    const uniqueDistricts = [...new Set(data.map((item) => item.district))].filter(Boolean);
-    uniqueDistricts.sort((a, b) => {
-      const idxA = districtOrder.indexOf(a);
-      const idxB = districtOrder.indexOf(b);
-      const valA = idxA === -1 ? 999 : idxA;
-      const valB = idxB === -1 ? 999 : idxB;
-      return valA - valB || a.localeCompare(b, "ko");
-    });
-    uniqueDistricts.forEach((value) => elements.district.add(new Option(value, value)));
+    if (elements.district) {
+      // Unique districts sorted by districtOrder
+      const uniqueDistricts = [...new Set(data.map((item) => item.district))].filter(Boolean);
+      uniqueDistricts.sort((a, b) => {
+        const idxA = districtOrder.indexOf(a);
+        const idxB = districtOrder.indexOf(b);
+        const valA = idxA === -1 ? 999 : idxA;
+        const valB = idxB === -1 ? 999 : idxB;
+        return valA - valB || a.localeCompare(b, "ko");
+      });
+      uniqueDistricts.forEach((value) => elements.district.add(new Option(value, value)));
+    }
 
-    // Unique types sorted alphabetically
-    const uniqueTypes = [...new Set(data.map((item) => item.type))].filter(Boolean);
-    uniqueTypes.sort((a, b) => a.localeCompare(b, "ko"));
-    uniqueTypes.forEach((value) => elements.type.add(new Option(value, value)));
+    if (elements.type) {
+      // Unique types sorted alphabetically
+      const uniqueTypes = [...new Set(data.map((item) => item.type))].filter(Boolean);
+      uniqueTypes.sort((a, b) => a.localeCompare(b, "ko"));
+      uniqueTypes.forEach((value) => elements.type.add(new Option(value, value)));
+    }
 
-    $("#totalStat").textContent = data.length;
-    $("#districtStat").textContent = new Set(data.map((item) => item.district).filter(Boolean)).size;
-    $("#confirmedStat").textContent = data.filter((item) => /있음/.test(item.rehabDept)).length;
-    $("#recoveryStat").textContent = data.filter((item) => /지정/.test(item.recovery)).length;
+    const totalStat = $("#totalStat");
+    if (totalStat) totalStat.textContent = data.length;
+
+    const districtStat = $("#districtStat");
+    if (districtStat) districtStat.textContent = new Set(data.map((item) => item.district).filter(Boolean)).size;
+
+    const confirmedStat = $("#confirmedStat");
+    if (confirmedStat) confirmedStat.textContent = data.filter((item) => /있음/.test(item.rehabDept)).length;
+
+    const recoveryStat = $("#recoveryStat");
+    if (recoveryStat) recoveryStat.textContent = data.filter((item) => /지정/.test(item.recovery)).length;
     
     renderDistrictRow();
   }
 
-  elements.search.addEventListener("input", (event) => { state.query = event.target.value.trim(); render(); });
-  elements.heroSuggestions.addEventListener("click", (event) => {
-    const suggestion = event.target.closest("[data-suggestion-id]");
-    if (suggestion) {
-      const item = data.find((record) => String(record.id) === suggestion.dataset.suggestionId);
-      if (item) openDetail(item);
-      return;
-    }
-    if (event.target.closest("[data-suggestion-more]")) {
-      document.querySelector(".directory").scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  });
-  elements.district.addEventListener("change", (event) => { 
-    state.district = event.target.value; 
-    document.querySelectorAll("#districtRow .drawer-chip").forEach((el) => {
-      el.classList.toggle("active", (el.dataset.district || "") === state.district);
-    });
-    render(); 
-  });
-  elements.type.addEventListener("change", (event) => { state.type = event.target.value; render(); });
-  elements.verification.addEventListener("change", (event) => { state.verification = event.target.value; render(); });
-  elements.sort.addEventListener("change", render);
-  $("#resetButton").addEventListener("click", resetAll);
-  $("#emptyReset").addEventListener("click", resetAll);
-  $("#printButton").addEventListener("click", () => window.print());
+  if (elements.search) {
+    elements.search.addEventListener("input", (event) => { state.query = event.target.value.trim(); render(); });
+  }
 
-  document.querySelector(".quick-filters").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-preset]");
-    if (!button) return;
-    state.preset = state.preset === button.dataset.preset ? "" : button.dataset.preset;
-    document.querySelectorAll("[data-preset]").forEach((item) => item.classList.toggle("active", item.dataset.preset === state.preset));
-    document.querySelector(".directory").scrollIntoView({ behavior: "smooth", block: "start" });
-    render();
-  });
-
-  elements.favoriteToggle.addEventListener("click", () => {
-    state.favoritesOnly = !state.favoritesOnly;
-    elements.favoriteToggle.setAttribute("aria-pressed", String(state.favoritesOnly));
-    render();
-  });
-
-  elements.activeFilters.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-remove]");
-    if (!button) return;
-    const key = button.dataset.remove;
-    if (key === "query") { state.query = ""; elements.search.value = ""; }
-    if (key === "district") { 
-      state.district = ""; 
-      elements.district.value = ""; 
-      document.querySelectorAll("#districtRow .drawer-chip").forEach((el) => {
-        el.classList.toggle("active", (el.dataset.district || "") === "");
-      });
-    }
-    if (key === "type") { state.type = ""; elements.type.value = ""; }
-    if (key === "verification") { state.verification = ""; elements.verification.value = ""; }
-    if (key === "preset") {
-      state.preset = "";
-      document.querySelectorAll("[data-preset]").forEach((item) => item.classList.remove("active"));
-    }
-    if (key === "favorites") {
-      state.favoritesOnly = false;
-      elements.favoriteToggle.setAttribute("aria-pressed", "false");
-    }
-    render();
-  });
-
-  elements.results.addEventListener("click", (event) => {
-    const card = event.target.closest("[data-id]");
-    const action = event.target.closest("[data-action]");
-    if (!card || !action) return;
-    const item = data.find((record) => String(record.id) === card.dataset.id);
-    if (!item) return;
-    if (action.dataset.action === "detail") openDetail(item);
-    if (action.dataset.action === "favorite") {
-      const id = String(item.id);
-      state.favorites.has(id) ? state.favorites.delete(id) : state.favorites.add(id);
-      saveFavorites();
-      showToast(state.favorites.has(id) ? "관심기관에 저장했습니다." : "관심기관에서 삭제했습니다.");
-      render();
-    }
-  });
-
-  elements.dialog.addEventListener("click", async (event) => {
-    if (event.target === elements.dialog || event.target.closest(".dialog-close")) elements.dialog.close();
-    const copyButton = event.target.closest("[data-copy]");
-    if (copyButton) {
-      await copyText(copyButton.dataset.copy);
-      showToast("주소를 복사했습니다.");
-    }
-    const shareButton = event.target.closest("[data-share]");
-    if (shareButton) {
-      const item = data.find((record) => String(record.id) === shareButton.dataset.share);
-      if (item) {
-        await copyText(getShareText(item));
-        showToast("상세 정보를 복사했습니다. 필요한 곳에 붙여넣어 공유하세요!");
+  if (elements.heroSuggestions) {
+    elements.heroSuggestions.addEventListener("click", (event) => {
+      const suggestion = event.target.closest("[data-suggestion-id]");
+      if (suggestion) {
+        const item = data.find((record) => String(record.id) === suggestion.dataset.suggestionId);
+        if (item) openDetail(item);
+        return;
       }
-    }
-  });
+      if (event.target.closest("[data-suggestion-more]")) {
+        const directorySection = $(".directory");
+        if (directorySection) {
+          directorySection.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    });
+  }
+
+  if (elements.district) {
+    elements.district.addEventListener("change", (event) => { 
+      state.district = event.target.value; 
+      document.querySelectorAll("#districtRow .drawer-chip").forEach((el) => {
+        el.classList.toggle("active", (el.dataset.district || "") === state.district);
+      });
+      render(); 
+    });
+  }
+
+  if (elements.type) {
+    elements.type.addEventListener("change", (event) => { state.type = event.target.value; render(); });
+  }
+
+  if (elements.verification) {
+    elements.verification.addEventListener("change", (event) => { state.verification = event.target.value; render(); });
+  }
+
+  if (elements.sort) {
+    elements.sort.addEventListener("change", render);
+  }
+
+  const resetButton = $("#resetButton");
+  if (resetButton) resetButton.addEventListener("click", resetAll);
+
+  const emptyReset = $("#emptyReset");
+  if (emptyReset) emptyReset.addEventListener("click", resetAll);
+
+  const printButton = $("#printButton");
+  if (printButton) printButton.addEventListener("click", () => window.print());
+
+  const quickFilters = $(".quick-filters");
+  if (quickFilters) {
+    quickFilters.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-preset]");
+      if (!button) return;
+      state.preset = state.preset === button.dataset.preset ? "" : button.dataset.preset;
+      document.querySelectorAll("[data-preset]").forEach((item) => item.classList.toggle("active", item.dataset.preset === state.preset));
+      
+      const directorySection = $(".directory");
+      if (directorySection) {
+        directorySection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      render();
+    });
+  }
+
+  if (elements.favoriteToggle) {
+    elements.favoriteToggle.addEventListener("click", () => {
+      state.favoritesOnly = !state.favoritesOnly;
+      elements.favoriteToggle.setAttribute("aria-pressed", String(state.favoritesOnly));
+      render();
+    });
+  }
+
+  if (elements.activeFilters) {
+    elements.activeFilters.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-remove]");
+      if (!button) return;
+      const key = button.dataset.remove;
+      if (key === "query") { state.query = ""; if (elements.search) elements.search.value = ""; }
+      if (key === "district") { 
+        state.district = ""; 
+        if (elements.district) elements.district.value = ""; 
+        document.querySelectorAll("#districtRow .drawer-chip").forEach((el) => {
+          el.classList.toggle("active", (el.dataset.district || "") === "");
+        });
+      }
+      if (key === "type") { state.type = ""; if (elements.type) elements.type.value = ""; }
+      if (key === "verification") { state.verification = ""; if (elements.verification) elements.verification.value = ""; }
+      if (key === "preset") {
+        state.preset = "";
+        document.querySelectorAll("[data-preset]").forEach((item) => item.classList.remove("active"));
+      }
+      if (key === "favorites") {
+        state.favoritesOnly = false;
+        if (elements.favoriteToggle) elements.favoriteToggle.setAttribute("aria-pressed", "false");
+      }
+      render();
+    });
+  }
+
+  if (elements.results) {
+    elements.results.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-id]");
+      const action = event.target.closest("[data-action]");
+      if (!card || !action) return;
+      const item = data.find((record) => String(record.id) === card.dataset.id);
+      if (!item) return;
+      if (action.dataset.action === "detail") openDetail(item);
+      if (action.dataset.action === "homepage-select") {
+        event.preventDefault();
+        openHomepageSelect(item);
+      }
+      if (action.dataset.action === "favorite") {
+        const id = String(item.id);
+        state.favorites.has(id) ? state.favorites.delete(id) : state.favorites.add(id);
+        saveFavorites();
+        showToast(state.favorites.has(id) ? "관심기관에 저장했습니다." : "관심기관에서 삭제했습니다.");
+        render();
+      }
+    });
+  }
+
+  if (elements.dialog) {
+    elements.dialog.addEventListener("click", async (event) => {
+      if (event.target === elements.dialog || event.target.closest(".dialog-close")) elements.dialog.close();
+      const copyButton = event.target.closest("[data-copy]");
+      if (copyButton) {
+        await copyText(copyButton.dataset.copy);
+        showToast("주소를 복사했습니다.");
+      }
+      const shareButton = event.target.closest("[data-share]");
+      if (shareButton) {
+        const item = data.find((record) => String(record.id) === shareButton.dataset.share);
+        if (item) {
+          await copyText(getShareText(item));
+          showToast("상세 정보를 복사했습니다. 필요한 곳에 붙여넣어 공유하세요!");
+        }
+      }
+      const homepageSelectBtn = event.target.closest('[data-action="homepage-select"]');
+      if (homepageSelectBtn) {
+        event.preventDefault();
+        const item = data.find((record) => String(record.id) === homepageSelectBtn.dataset.id);
+        if (item) openHomepageSelect(item);
+      }
+    });
+  }
+
+  if (elements.homepageDialog) {
+    elements.homepageDialog.addEventListener("click", (event) => {
+      if (event.target === elements.homepageDialog || event.target.closest(".homepage-dialog-close")) {
+        elements.homepageDialog.close();
+      }
+      if (event.target.closest(".homepage-btn-option")) {
+        elements.homepageDialog.close();
+      }
+    });
+  }
 
   document.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
       event.preventDefault();
-      elements.search.focus();
+      if (elements.search) elements.search.focus();
     }
-    if (event.key === "Escape" && elements.search.value && !elements.dialog.open) {
+    if (event.key === "Escape" && elements.search && elements.search.value && elements.dialog && !elements.dialog.open) {
       state.query = "";
       elements.search.value = "";
       render();
@@ -585,17 +707,20 @@
   });
 
   // Guide tabs functionality
-  document.querySelector(".guide-tabs")?.addEventListener("click", (event) => {
-    const tabBtn = event.target.closest(".guide-tab-btn");
-    if (!tabBtn) return;
-    const targetId = tabBtn.dataset.tab;
-    
-    document.querySelectorAll(".guide-tab-btn").forEach((btn) => btn.classList.remove("active"));
-    tabBtn.classList.add("active");
-    
-    document.querySelectorAll(".guide-pane").forEach((pane) => pane.classList.remove("active"));
-    document.getElementById(targetId)?.classList.add("active");
-  });
+  const guideTabs = $(".guide-tabs");
+  if (guideTabs) {
+    guideTabs.addEventListener("click", (event) => {
+      const tabBtn = event.target.closest(".guide-tab-btn");
+      if (!tabBtn) return;
+      const targetId = tabBtn.dataset.tab;
+      
+      document.querySelectorAll(".guide-tab-btn").forEach((btn) => btn.classList.remove("active"));
+      tabBtn.classList.add("active");
+      
+      document.querySelectorAll(".guide-pane").forEach((pane) => pane.classList.remove("active"));
+      document.getElementById(targetId)?.classList.add("active");
+    });
+  }
 
   // Copy phone number on click & alert box
   document.addEventListener("click", async (event) => {
